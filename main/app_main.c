@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +9,7 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 
-//Define
+//DEFINE
 #define PIN_NUM_MISO 19
 #define PIN_NUM_MOSI 23
 #define PIN_NUM_CLK  18
@@ -22,26 +23,26 @@
 #define GxGDEW029Z10_HEIGHT 296
 #define GxGDEW029Z10_BUFFER_SIZE ((uint32_t)(GxGDEW029Z10_WIDTH) * (uint32_t)(GxGDEW029Z10_HEIGHT) / 8)
 
-#define CMD_PANEL_SETTING 0x00                      
-#define CMD_POWER_SETTING 0x01                      
-#define CMD_POWER_OFF 0x02                          
-#define CMD_POWER_ON 0x04                           
-#define CMD_BOOSTER_SOFT_START 0x06                 
-#define CMD_DEEP_SLEEP 0x07                         
-#define CMD_DISPLAY_START_TRANSMISSION_W_B 0x10     
-#define CMD_DATA_STOP 0x11                          
-#define CMD_DISPLAY_REFRESH 0x12                    
-#define CMD_DISPLAY_START_TRANSMISSION_R 0x13       
+#define CMD_PANEL_SETTING 0x00
+#define CMD_POWER_SETTING 0x01
+#define CMD_POWER_OFF 0x02
+#define CMD_POWER_ON 0x04
+#define CMD_BOOSTER_SOFT_START 0x06
+#define CMD_DEEP_SLEEP 0x07
+#define CMD_DISPLAY_START_TRANSMISSION_W_B 0x10
+#define CMD_DATA_STOP 0x11
+#define CMD_DISPLAY_REFRESH 0x12
+#define CMD_DISPLAY_START_TRANSMISSION_R 0x13
 #define CMD_PLL_CONTROL 0x30
-#define CMD_CDI 0x50                                
-#define CMD_RESOLUTION_SETTING 0x61         
-#define CMD_VCM_DC_SETTING 0x82        
+#define CMD_CDI 0x50
+#define CMD_RESOLUTION_SETTING 0x61
+#define CMD_VCM_DC_SETTING 0x82
 #define CMD_PARTIAL_WINDOW 0x90
 #define CMD_PARTIAL_IN 0x91
 #define CMD_PARTIAL_OUT 0x92
 
 
-void lcd_spi_pre_transfer_callback(spi_transaction_t *t)
+void spi_pre_transfer_callback(spi_transaction_t *t)
 {
     int dc=(int)t->user;
     gpio_set_level(PIN_NUM_DC, dc);
@@ -150,24 +151,41 @@ uint16_t setPartialRamArea(spi_device_handle_t spi, uint16_t x, uint16_t y, uint
     return (7 + xe - x) / 8; // number of bytes to transfer per line
 }
 
-void eraseDisplay(spi_device_handle_t spi){
-    // writeCommand(spi, CMD_PARTIAL_IN);
-    // setPartialRamArea(spi, 0, 0, GxGDEW029Z10_WIDTH - 50, GxGDEW029Z10_HEIGHT - 50);
+// color{b/w, r}: red={0,0}or{1,0}, white={1,1}, black={0,1} 
+// color: 0=black, 1=white, 2=red
+void eraseDisplay(spi_device_handle_t spi, uint8_t color){
+    uint8_t colorWB = 0xFF;
+    uint8_t colorR = 0xFF;
+    switch(color){
+        case 0:
+            colorWB =0x00;
+            colorR = 0xFF;
+            printf("erase black");
+            break;
+        case 1:
+            colorWB =0xFF;
+            colorR = 0xFF;
+            printf("erase white");
+            break;
+        case 2:
+            colorWB =0x00;
+            colorR = 0x00;
+            printf("erase red");
+            break;
+        default:
+            printf("erase white");
+            break;
+    }
     writeCommand(spi, CMD_DISPLAY_START_TRANSMISSION_W_B);
     for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
-        writeData(spi, 0x00);
+        writeData(spi, colorWB);
     }
-    // writeCommand(spi, CMD_DATA_STOP);
     writeCommand(spi, CMD_DISPLAY_START_TRANSMISSION_R);
     for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
-        writeData(spi, 0x00);
+        writeData(spi, colorR);
     }
-    // writeCommand(spi, CMD_DATA_STOP);
     writeCommand(spi, CMD_DISPLAY_REFRESH);
     waitWhileBusy();
-    // writeCommand(spi, CMD_PARTIAL_OUT);
-    // writeCommand(spi, CMD_CDI);
-    // writeData(spi, 0xF7);
 }
 
 void app_main()
@@ -189,19 +207,21 @@ void app_main()
         .mode=0,                                //SPI mode 0
         .spics_io_num=PIN_NUM_CS,               //CS pin
         .queue_size=50,                      //We want to be able to queue 7 transactions at a time
-        .pre_cb=lcd_spi_pre_transfer_callback,  //Specify pre-transfer callback to handle D/C line
+        .pre_cb=spi_pre_transfer_callback,  //Specify pre-transfer callback to handle D/C line
     };
     //Initialize the SPI bus
     ret=spi_bus_initialize(VSPI_HOST, &buscfg, 1);
     ESP_ERROR_CHECK(ret);
-    printf("ret: %d\n", ret);
     //Attach the LCD to the SPI bus
     ret=spi_bus_add_device(VSPI_HOST, &devcfg, &spi);
     ESP_ERROR_CHECK(ret);
-    printf("ret: %d\n", ret);
 
     wakeUp(spi);
-    eraseDisplay(spi);
+    eraseDisplay(spi, 0);
+    sleep(5);
+    eraseDisplay(spi, 1);
+    sleep(5);
+    eraseDisplay(spi, 2);
     deepSleep(spi);
     printf("finished\n");
 }
