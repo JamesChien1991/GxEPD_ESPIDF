@@ -97,24 +97,12 @@ void wakeUp(spi_device_handle_t spi){
     writeData(spi, 0x17);
     writeData(spi, 0x17);
     writeData(spi, 0x17);
-    //0x03, 0x00, 0x2b, 0x2b, 0x09
-    // writeCommand(spi, CMD_POWER_SETTING);
-    // writeData(spi, 0x03);
-    // writeData(spi, 0x00);
-    // writeData(spi, 0x2b);
-    // writeData(spi, 0x2b);
-    // writeData(spi, 0x09);
     writeCommand(spi, CMD_POWER_ON);
     waitWhileBusy();
     writeCommand(spi, CMD_PANEL_SETTING);
     writeData(spi, 0x8f);
-    // writeCommand(spi, CMD_PARTIAL_OUT);
     writeCommand(spi, CMD_CDI);
     writeData(spi, 0x77);
-    // writeCommand(spi, CMD_PLL_CONTROL);
-    // writeData(spi, 0x3a);
-    // writeCommand(spi, CMD_VCM_DC_SETTING);
-    // writeData(spi, 0x77);
     writeCommand(spi, CMD_RESOLUTION_SETTING);
     writeData(spi, 0x80);
     writeData(spi, 0x01);
@@ -146,8 +134,6 @@ uint16_t setPartialRamArea(spi_device_handle_t spi, uint16_t x, uint16_t y, uint
     writeData(spi, data);
     data[0] =  0x01;
     writeData(spi, data);
-    // don't see any difference
-    //IO.writeDataTransaction(0x00); // don't see any difference
     return (7 + xe - x) / 8; // number of bytes to transfer per line
 }
 
@@ -188,6 +174,96 @@ void eraseDisplay(spi_device_handle_t spi, uint8_t color){
     waitWhileBusy();
 }
 
+void setAllScreen(uint8_t* image_data_w_b, uint8_t* image_data_r, uint8_t color){
+    switch(color){
+        case 0:
+            for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
+                *(image_data_w_b+i) = 0x00;
+                *(image_data_r+i) = 0xFF;
+            }
+            break;
+        case 1:
+            for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
+                *(image_data_w_b+i) = 0xFF;
+                *(image_data_r+i) = 0xFF;
+            }
+            printf("set color %d \n", color);
+            break;
+        case 2:
+            for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
+                *(image_data_w_b+i) = 0xFF;
+                *(image_data_r+i) = 0xFF;
+            }
+            break;
+        default:
+            printf("wrong color %d \n", color);
+            break;
+    }
+}
+
+//x: 128, y: 296; x,y: 0,0 -> 127,0 -> 0,1 -> 127,1 ...
+void setRectangle(uint8_t* image_data_w_b, uint8_t* image_data_r, uint8_t color, uint16_t sx, uint16_t ex, uint16_t sy, uint16_t ey){
+    uint8_t data = 0x00;
+    uint8_t bit_shift = 0;
+    uint8_t bit_data = 0;
+    // writeCommand(spi, CMD_DISPLAY_START_TRANSMISSION_W_B);
+    // 每8bit為單位，從bit7 ~ 0對應pixel0 ~7
+    for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE*8; i++){
+        bit_shift = 7 - (i % 8);
+        bit_data = 0x01 << bit_shift;
+        if (i%GxGDEW029Z10_WIDTH >= sx && i%GxGDEW029Z10_WIDTH < ex && i/GxGDEW029Z10_WIDTH >= sy && i/GxGDEW029Z10_WIDTH < ey){
+            switch(color){
+                case 0:
+                    //black
+                    *(image_data_w_b+(i/8)) = (*(image_data_w_b+(i/8))) & (~bit_data);
+                    *(image_data_r+(i/8)) = (*(image_data_r+(i/8))) | bit_data;
+                    break;
+                case 1:
+                    //white
+                    *(image_data_w_b+(i/8)) = (*(image_data_w_b+(i/8))) | bit_data;
+                    *(image_data_r+(i/8)) = (*(image_data_r+(i/8))) | bit_data;
+                    break;
+                case 2:
+                    //red
+                    *(image_data_w_b+(i/8)) = (*(image_data_w_b+(i/8))) & (~bit_data);
+                    *(image_data_r+(i/8)) = (*(image_data_r+(i/8))) & (~bit_data);
+                    break;
+                default:
+                    printf("wrong color: %d \n", color);
+                    break;
+            }
+        }
+    }
+}
+
+void drawScreen(spi_device_handle_t spi, uint8_t* image_data_w_b, uint8_t* image_data_r){
+    writeCommand(spi, CMD_DISPLAY_START_TRANSMISSION_W_B);
+    for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
+        writeData(spi, *(image_data_w_b+i));
+    }
+    writeCommand(spi, CMD_DISPLAY_START_TRANSMISSION_R);
+    for (uint32_t i = 0; i < GxGDEW029Z10_BUFFER_SIZE; i++){
+        writeData(spi, *(image_data_r+i));
+    }
+    writeCommand(spi, CMD_DISPLAY_REFRESH);
+    waitWhileBusy();
+}
+
+void drawImage(spi_device_handle_t spi){
+    printf("drawImage\n");
+    uint8_t *data_wb = malloc(GxGDEW029Z10_BUFFER_SIZE * sizeof(uint8_t));
+    uint8_t *data_r = malloc(GxGDEW029Z10_BUFFER_SIZE * sizeof(uint8_t));
+    printf("drawImage1\n");
+    setAllScreen(data_wb, data_r, 1);
+    printf("drawImage2\n");
+    setRectangle(data_wb, data_r, 0, 10, 100, 50, 150);
+    setRectangle(data_wb, data_r, 2, 50, 128, 100, 200);
+    setRectangle(data_wb, data_r, 0, 30, 110, 180, 280);
+    drawScreen(spi, data_wb, data_r);
+    free(data_wb);
+    free(data_r);
+}
+
 void app_main()
 {
     gpio_set_direction(PIN_NUM_DC, GPIO_MODE_OUTPUT);
@@ -217,11 +293,8 @@ void app_main()
     ESP_ERROR_CHECK(ret);
 
     wakeUp(spi);
-    eraseDisplay(spi, 0);
-    sleep(5);
-    eraseDisplay(spi, 1);
-    sleep(5);
-    eraseDisplay(spi, 2);
+    // eraseDisplay(spi, 1);
+    drawImage(spi);
     deepSleep(spi);
     printf("finished\n");
 }
