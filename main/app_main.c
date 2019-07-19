@@ -293,7 +293,6 @@ void app_main()
     ESP_ERROR_CHECK(ret);
 
     wakeUp(spi);
-    // eraseDisplay(spi, 1);
     drawImage(spi);
     deepSleep(spi);
     printf("finished\n");
