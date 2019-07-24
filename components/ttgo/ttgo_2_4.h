@@ -11,9 +11,9 @@
 #define PIN_NUM_CLK  18
 #define PIN_NUM_CS   5
 
-#define PIN_NUM_DC   17
-#define PIN_NUM_RST  16
-#define PIN_NUM_BCKL 4
+#define PIN_NUM_DC   17 //OUT
+#define PIN_NUM_RST  16 //OUT
+#define PIN_NUM_BCKL 4  //IN
 
 #define GxGDEW029Z10_WIDTH 128
 #define GxGDEW029Z10_HEIGHT 296
